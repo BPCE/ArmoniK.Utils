@@ -26,7 +26,7 @@ using JetBrains.Annotations;
 
 namespace ArmoniK.Utils;
 
-// Tasks spawned by ParallelSelect are cancelled and awaited when the enumeration ends.
+// Tasks spawned by ParallelSelect, and the iteration over the input, are cancelled and awaited when the enumeration ends.
 // If the enumerator is never disposed, they are only cancelled from the finalizer, and may outlive the enumeration.
 // They must therefore not use any object disposed at the end of the enumeration:
 // - tokens are captured before any disposal, and their sources are cancelled before being disposed

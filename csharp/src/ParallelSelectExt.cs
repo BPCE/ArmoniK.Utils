@@ -36,7 +36,9 @@ public static class ParallelSelectExt
   /// </summary>
   /// <remarks>
   ///   When the enumeration ends (fully consumed, stopped early, failed or cancelled),
-  ///   it waits for all the calls to `func` that have been started.
+  ///   it waits for all the calls to `func` that have been started, and for the input enumerable to be disposed.
+  ///   This includes waiting for the pending fetch of the next input: if the input enumerable ignores the cancellation,
+  ///   the wait lasts until that input is available or the input enumerable ends.
   /// </remarks>
   /// <param name="enumerable">Enumerable to iterate on</param>
   /// <param name="parallelTaskOptions">Options (eg: parallelismLimit, cancellationToken)</param>
@@ -63,7 +65,9 @@ public static class ParallelSelectExt
   /// </summary>
   /// <remarks>
   ///   When the enumeration ends (fully consumed, stopped early, failed or cancelled),
-  ///   it waits for all the calls to `func` that have been started.
+  ///   it waits for all the calls to `func` that have been started, and for the input enumerable to be disposed.
+  ///   This includes waiting for the pending fetch of the next input: if the input enumerable ignores the cancellation,
+  ///   the wait lasts until that input is available or the input enumerable ends.
   /// </remarks>
   /// <param name="enumerable">Enumerable to iterate on</param>
   /// <param name="parallelTaskOptions">Options (eg: parallelismLimit, cancellationToken)</param>
@@ -93,7 +97,9 @@ public static class ParallelSelectExt
   /// </summary>
   /// <remarks>
   ///   When the enumeration ends (fully consumed, stopped early, failed or cancelled),
-  ///   it waits for all the calls to `func` that have been started.
+  ///   it waits for all the calls to `func` that have been started, and for the input enumerable to be disposed.
+  ///   This includes waiting for the pending fetch of the next input: if the input enumerable ignores the cancellation,
+  ///   the wait lasts until that input is available or the input enumerable ends.
   /// </remarks>
   /// <param name="enumerable">Enumerable to iterate on</param>
   /// <param name="func">
@@ -117,7 +123,9 @@ public static class ParallelSelectExt
   /// </summary>
   /// <remarks>
   ///   When the enumeration ends (fully consumed, stopped early, failed or cancelled),
-  ///   it waits for all the calls to `func` that have been started.
+  ///   it waits for all the calls to `func` that have been started, and for the input enumerable to be disposed.
+  ///   This includes waiting for the pending fetch of the next input: if the input enumerable ignores the cancellation,
+  ///   the wait lasts until that input is available or the input enumerable ends.
   /// </remarks>
   /// <param name="enumerable">Enumerable to iterate on</param>
   /// <param name="func">
@@ -141,7 +149,9 @@ public static class ParallelSelectExt
   /// </summary>
   /// <remarks>
   ///   When the enumeration ends (fully consumed, stopped early, failed or cancelled),
-  ///   it waits for all the calls to `func` that have been started.
+  ///   it waits for all the calls to `func` that have been started, and for the input enumerable to be disposed.
+  ///   This includes waiting for the pending fetch of the next input: if the input enumerable ignores the cancellation,
+  ///   the wait lasts until that input is available or the input enumerable ends.
   /// </remarks>
   /// <param name="enumerable">Enumerable to iterate on</param>
   /// <param name="parallelTaskOptions">Options (eg: parallelismLimit, cancellationToken)</param>
@@ -164,7 +174,9 @@ public static class ParallelSelectExt
   /// </summary>
   /// <remarks>
   ///   When the enumeration ends (fully consumed, stopped early, failed or cancelled),
-  ///   it waits for all the calls to `func` that have been started.
+  ///   it waits for all the calls to `func` that have been started, and for the input enumerable to be disposed.
+  ///   This includes waiting for the pending fetch of the next input: if the input enumerable ignores the cancellation,
+  ///   the wait lasts until that input is available or the input enumerable ends.
   /// </remarks>
   /// <param name="enumerable">Enumerable to iterate on</param>
   /// <param name="parallelTaskOptions">Options (eg: parallelismLimit, cancellationToken)</param>
@@ -187,7 +199,9 @@ public static class ParallelSelectExt
   /// </summary>
   /// <remarks>
   ///   When the enumeration ends (fully consumed, stopped early, failed or cancelled),
-  ///   it waits for all the calls to `func` that have been started.
+  ///   it waits for all the calls to `func` that have been started, and for the input enumerable to be disposed.
+  ///   This includes waiting for the pending fetch of the next input: if the input enumerable ignores the cancellation,
+  ///   the wait lasts until that input is available or the input enumerable ends.
   /// </remarks>
   /// <param name="enumerable">Enumerable to iterate on</param>
   /// <param name="func">Function to spawn on the enumerable input</param>
@@ -207,7 +221,9 @@ public static class ParallelSelectExt
   /// </summary>
   /// <remarks>
   ///   When the enumeration ends (fully consumed, stopped early, failed or cancelled),
-  ///   it waits for all the calls to `func` that have been started.
+  ///   it waits for all the calls to `func` that have been started, and for the input enumerable to be disposed.
+  ///   This includes waiting for the pending fetch of the next input: if the input enumerable ignores the cancellation,
+  ///   the wait lasts until that input is available or the input enumerable ends.
   /// </remarks>
   /// <param name="enumerable">Enumerable to iterate on</param>
   /// <param name="func">Function to spawn on the enumerable input</param>
@@ -227,7 +243,9 @@ public static class ParallelSelectExt
   /// </summary>
   /// <remarks>
   ///   When the iteration ends (fully consumed, stopped early, failed or cancelled),
-  ///   it waits for all the calls to `func` that have been started.
+  ///   it waits for all the calls to `func` that have been started, and for the input enumerable to be disposed.
+  ///   This includes waiting for the pending fetch of the next input: if the input enumerable ignores the cancellation,
+  ///   the wait lasts until that input is available or the input enumerable ends.
   /// </remarks>
   /// <param name="enumerable">Enumerable to iterate on</param>
   /// <param name="parallelTaskOptions">Options (eg: parallelismLimit, cancellationToken)</param>
@@ -253,7 +271,9 @@ public static class ParallelSelectExt
   /// </summary>
   /// <remarks>
   ///   When the iteration ends (fully consumed, stopped early, failed or cancelled),
-  ///   it waits for all the calls to `func` that have been started.
+  ///   it waits for all the calls to `func` that have been started, and for the input enumerable to be disposed.
+  ///   This includes waiting for the pending fetch of the next input: if the input enumerable ignores the cancellation,
+  ///   the wait lasts until that input is available or the input enumerable ends.
   /// </remarks>
   /// <param name="enumerable">Enumerable to iterate on</param>
   /// <param name="parallelTaskOptions">Options (eg: parallelismLimit, cancellationToken)</param>
@@ -293,7 +313,9 @@ public static class ParallelSelectExt
   /// </summary>
   /// <remarks>
   ///   When the iteration ends (fully consumed, stopped early, failed or cancelled),
-  ///   it waits for all the calls to `func` that have been started.
+  ///   it waits for all the calls to `func` that have been started, and for the input enumerable to be disposed.
+  ///   This includes waiting for the pending fetch of the next input: if the input enumerable ignores the cancellation,
+  ///   the wait lasts until that input is available or the input enumerable ends.
   /// </remarks>
   /// <param name="enumerable">Enumerable to iterate on</param>
   /// <param name="func">
@@ -316,7 +338,9 @@ public static class ParallelSelectExt
   /// </summary>
   /// <remarks>
   ///   When the iteration ends (fully consumed, stopped early, failed or cancelled),
-  ///   it waits for all the calls to `func` that have been started.
+  ///   it waits for all the calls to `func` that have been started, and for the input enumerable to be disposed.
+  ///   This includes waiting for the pending fetch of the next input: if the input enumerable ignores the cancellation,
+  ///   the wait lasts until that input is available or the input enumerable ends.
   /// </remarks>
   /// <param name="enumerable">Enumerable to iterate on</param>
   /// <param name="func">
@@ -339,7 +363,9 @@ public static class ParallelSelectExt
   /// </summary>
   /// <remarks>
   ///   When the iteration ends (fully consumed, stopped early, failed or cancelled),
-  ///   it waits for all the calls to `func` that have been started.
+  ///   it waits for all the calls to `func` that have been started, and for the input enumerable to be disposed.
+  ///   This includes waiting for the pending fetch of the next input: if the input enumerable ignores the cancellation,
+  ///   the wait lasts until that input is available or the input enumerable ends.
   /// </remarks>
   /// <param name="enumerable">Enumerable to iterate on</param>
   /// <param name="parallelTaskOptions">Options (eg: parallelismLimit, cancellationToken)</param>
@@ -361,7 +387,9 @@ public static class ParallelSelectExt
   /// </summary>
   /// <remarks>
   ///   When the iteration ends (fully consumed, stopped early, failed or cancelled),
-  ///   it waits for all the calls to `func` that have been started.
+  ///   it waits for all the calls to `func` that have been started, and for the input enumerable to be disposed.
+  ///   This includes waiting for the pending fetch of the next input: if the input enumerable ignores the cancellation,
+  ///   the wait lasts until that input is available or the input enumerable ends.
   /// </remarks>
   /// <param name="enumerable">Enumerable to iterate on</param>
   /// <param name="parallelTaskOptions">Options (eg: parallelismLimit, cancellationToken)</param>
@@ -383,7 +411,9 @@ public static class ParallelSelectExt
   /// </summary>
   /// <remarks>
   ///   When the iteration ends (fully consumed, stopped early, failed or cancelled),
-  ///   it waits for all the calls to `func` that have been started.
+  ///   it waits for all the calls to `func` that have been started, and for the input enumerable to be disposed.
+  ///   This includes waiting for the pending fetch of the next input: if the input enumerable ignores the cancellation,
+  ///   the wait lasts until that input is available or the input enumerable ends.
   /// </remarks>
   /// <param name="enumerable">Enumerable to iterate on</param>
   /// <param name="func">Function to spawn on the enumerable input</param>
@@ -402,7 +432,9 @@ public static class ParallelSelectExt
   /// </summary>
   /// <remarks>
   ///   When the iteration ends (fully consumed, stopped early, failed or cancelled),
-  ///   it waits for all the calls to `func` that have been started.
+  ///   it waits for all the calls to `func` that have been started, and for the input enumerable to be disposed.
+  ///   This includes waiting for the pending fetch of the next input: if the input enumerable ignores the cancellation,
+  ///   the wait lasts until that input is available or the input enumerable ends.
   /// </remarks>
   /// <param name="enumerable">Enumerable to iterate on</param>
   /// <param name="func">Function to spawn on the enumerable input</param>
