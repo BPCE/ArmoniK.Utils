@@ -1109,6 +1109,160 @@ public class ParallelSelectExtTest
 
   [Test]
   [AbortAfter(10000)]
+  public async Task ThrowingCancellationCallback([Values] bool unordered,
+                                                 [Values] bool throwing)
+  {
+    // Flush the garbage from previous tests
+    GC.Collect();
+    GC.WaitForPendingFinalizers();
+
+    const int throwAt    = 5;
+    var       unobserved = new ConcurrentBag<Exception>();
+
+    void Handler(object?                          sender,
+                 UnobservedTaskExceptionEventArgs e)
+    {
+      unobserved.Add(e.Exception);
+      e.SetObserved();
+    }
+
+    // Inputs before throwAt complete right away, the following ones wait for their cancellation,
+    // and register a callback that throws when cancelled
+    async Task<int> F(int               x,
+                      CancellationToken cancellationToken)
+    {
+      if (x < throwAt)
+      {
+        await Task.Yield();
+        return x;
+      }
+
+      if (throwing && x == throwAt)
+      {
+        // Let the following calls register their callback
+        await Task.Delay(50)
+                  .ConfigureAwait(false);
+        throw new ApplicationException();
+      }
+
+      // The callback is the only registration on the token: another one could unregister it before it runs
+      var cancelled = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
+      using var registration = cancellationToken.Register(() =>
+                                                          {
+                                                            cancelled.SetResult(true);
+                                                            throw new InvalidOperationException();
+                                                          });
+      await cancelled.Task.ConfigureAwait(false);
+      cancellationToken.ThrowIfCancellationRequested();
+      return x;
+    }
+
+    async Task Consume()
+    {
+      await foreach (var _ in GenerateInts(100)
+                              .ParallelSelect(new ParallelTaskOptions(unordered,
+                                                                      10),
+                                              F)
+                              .ConfigureAwait(false))
+      {
+        if (!throwing)
+        {
+          break;
+        }
+      }
+    }
+
+    TaskScheduler.UnobservedTaskException += Handler;
+
+    try
+    {
+      // The errors of the callbacks neither replace the error of func, nor make stopping early throw
+      if (throwing)
+      {
+        Assert.That(async () => await Consume()
+                                  .ConfigureAwait(false),
+                    Throws.TypeOf<ApplicationException>());
+      }
+      else
+      {
+        Assert.That(async () => await Consume()
+                                  .ConfigureAwait(false),
+                    Throws.Nothing);
+      }
+
+      GC.Collect();
+      GC.WaitForPendingFinalizers();
+      GC.Collect();
+    }
+    finally
+    {
+      TaskScheduler.UnobservedTaskException -= Handler;
+    }
+
+    Assert.That(unobserved,
+                Is.Empty);
+  }
+
+  [Test]
+  [AbortAfter(10000)]
+  public async Task ThrowingCancellationCallbackOnFinalizer([Values] bool unordered)
+  {
+    var cancelled = new StrongBox<int>();
+
+    await StartWithThrowingCallbackAndForget(unordered,
+                                             cancelled)
+      .ConfigureAwait(false);
+
+    // The finalizer of the enumeration cancels the calls: the errors of their callbacks must not crash the process
+    while (Volatile.Read(ref cancelled.Value) == 0)
+    {
+      GC.Collect();
+      GC.WaitForPendingFinalizers();
+      await Task.Delay(10)
+                .ConfigureAwait(false);
+    }
+  }
+
+  [MethodImpl(MethodImplOptions.NoInlining)]
+  private static async Task StartWithThrowingCallbackAndForget(bool           unordered,
+                                                               StrongBox<int> cancelled)
+  {
+    // The first input completes right away, the following ones wait for their cancellation,
+    // and register a callback that throws when cancelled
+    async Task<int> F(int               x,
+                      CancellationToken cancellationToken)
+    {
+      if (x == 0)
+      {
+        await Task.Yield();
+        return x;
+      }
+
+      // The callback is the only registration on the token: another one could unregister it before it runs
+      var tcs = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
+      using var registration = cancellationToken.Register(() =>
+                                                          {
+                                                            Interlocked.Increment(ref cancelled.Value);
+                                                            tcs.SetResult(true);
+                                                            throw new InvalidOperationException();
+                                                          });
+      await tcs.Task.ConfigureAwait(false);
+      cancellationToken.ThrowIfCancellationRequested();
+      return x;
+    }
+
+    var enumerator = GenerateInts(10)
+                     .ParallelSelect(new ParallelTaskOptions(unordered,
+                                                             4),
+                                     F)
+                     .GetAsyncEnumerator();
+
+    await enumerator.MoveNextAsync()
+                    .ConfigureAwait(false);
+  }
+
+  [Test]
+  [AbortAfter(10000)]
   public void ParallelForeachCancelsOnError([Values] bool useAsync)
   {
     var running = 0;

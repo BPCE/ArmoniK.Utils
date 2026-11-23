@@ -72,17 +72,12 @@ internal static class ParallelSelectInternal
     // Ensure all running tasks are actually aborted at the end, and unregister from cancellationToken.
     // If the enumerator is not disposed, the deferrer finalizer does it: otherwise, globalCts would
     // stay registered on cancellationToken, leaking memory if cancellationToken is long-lived.
+    // The cancellation must not throw, as this may run on the finalizer thread.
     await using var cleanup = new Deferrer(() =>
                                            {
-                                             try
-                                             {
-                                               globalCts.Cancel();
-                                             }
-                                             finally
-                                             {
-                                               iterationCts.Dispose();
-                                               globalCts.Dispose();
-                                             }
+                                             CancelIgnoringCallbackErrors(globalCts);
+                                             iterationCts.Dispose();
+                                             globalCts.Dispose();
                                            });
 
     // Output: in ordered mode, the tasks are written when they start; in unordered mode, the results when they complete.
@@ -140,13 +135,13 @@ internal static class ParallelSelectInternal
         {
           if (!unordered)
           {
-            errorCts.Cancel();
+            CancelIgnoringCallbackErrors(errorCts);
             throw;
           }
 
           // Written before cancelling the other calls, so that their cancellation is reported after this error
           channel.Writer.TryWrite(new ValueTask<TOutput>(Task.FromException<TOutput>(e)));
-          errorCts.Cancel();
+          CancelIgnoringCallbackErrors(errorCts);
           return default!;
         }
         finally
@@ -226,30 +221,46 @@ internal static class ParallelSelectInternal
     }
     finally
     {
-      try
-      {
-        // Stop the producer and the running tasks
-        globalCts.Cancel();
-      }
-      finally
-      {
-        // Wait for the producer and all the tasks it has started
-        await done.Task.ConfigureAwait(false);
+      // Stop the producer and the running tasks
+      CancelIgnoringCallbackErrors(globalCts);
 
-        // Observe the remaining errors: only the first one is reported to the consumer.
-        // The tasks may not be completed yet, as a call releases its reference before its task completes.
-        while (channel.Reader.TryRead(out var item))
+      // Wait for the producer and all the tasks it has started
+      await done.Task.ConfigureAwait(false);
+
+      // Observe the remaining errors: only the first one is reported to the consumer.
+      // The tasks may not be completed yet, as a call releases its reference before its task completes.
+      while (channel.Reader.TryRead(out var item))
+      {
+        try
         {
-          try
-          {
-            await item.ConfigureAwait(false);
-          }
-          catch
-          {
-            // ignored
-          }
+          await item.ConfigureAwait(false);
+        }
+        catch
+        {
+          // ignored
         }
       }
+    }
+  }
+
+  /// <summary>
+  ///   Cancels the source, ignoring the errors thrown by the callbacks registered on its token.
+  /// </summary>
+  /// <remarks>
+  ///   The callbacks may be registered by func on the token it receives.
+  ///   Their errors must not replace the error being reported, nor be thrown on the finalizer thread.
+  ///   All the callbacks are still executed, as Cancel only throws once they have all been called.
+  /// </remarks>
+  /// <param name="cts">Source to cancel</param>
+  private static void CancelIgnoringCallbackErrors(CancellationTokenSource cts)
+  {
+    try
+    {
+      cts.Cancel();
+    }
+    catch (AggregateException)
+    {
+      // ignored
     }
   }
 
