@@ -1119,6 +1119,10 @@ public class ParallelSelectExtTest
     const int throwAt    = 5;
     var       unobserved = new ConcurrentBag<Exception>();
 
+    // The enumeration ends once a callback is registered, so that the callback runs inside Cancel and not inside Register.
+    // With a parallelism of 10, the inputs after throwAt are started without waiting for the previous results.
+    var registered = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
+
     void Handler(object?                          sender,
                  UnobservedTaskExceptionEventArgs e)
     {
@@ -1139,9 +1143,7 @@ public class ParallelSelectExtTest
 
       if (throwing && x == throwAt)
       {
-        // Let the following calls register their callback
-        await Task.Delay(50)
-                  .ConfigureAwait(false);
+        await registered.Task.ConfigureAwait(false);
         throw new ApplicationException();
       }
 
@@ -1152,6 +1154,7 @@ public class ParallelSelectExtTest
                                                             cancelled.SetResult(true);
                                                             throw new InvalidOperationException();
                                                           });
+      registered.TrySetResult(true);
       await cancelled.Task.ConfigureAwait(false);
       cancellationToken.ThrowIfCancellationRequested();
       return x;
@@ -1167,6 +1170,7 @@ public class ParallelSelectExtTest
       {
         if (!throwing)
         {
+          await registered.Task.ConfigureAwait(false);
           break;
         }
       }
@@ -1306,12 +1310,35 @@ public class ParallelSelectExtTest
 
   [Test]
   [AbortAfter(10000)]
-  [Retry(4)]
   public async Task SynchronousFuncWithForeignContext([Values] bool unordered)
   {
     const int n           = 16;
     const int parallelism = 4;
 
+    // The calls must not wait for the thread pool to grow, even if it is busy with blocking work from other tests
+    ThreadPool.GetMinThreads(out var minWorkerThreads,
+                             out var minCompletionPortThreads);
+    Assert.That(ThreadPool.SetMinThreads(minWorkerThreads + 64,
+                                         minCompletionPortThreads),
+                Is.True);
+    try
+    {
+      await RunSynchronousFuncWithForeignContext(unordered,
+                                                 n,
+                                                 parallelism)
+        .ConfigureAwait(false);
+    }
+    finally
+    {
+      ThreadPool.SetMinThreads(minWorkerThreads,
+                               minCompletionPortThreads);
+    }
+  }
+
+  private static async Task RunSynchronousFuncWithForeignContext(bool unordered,
+                                                                 int  n,
+                                                                 int  parallelism)
+  {
     using var context = new SingleThreadSynchronizationContext();
 
     var running    = 0;
@@ -1338,8 +1365,7 @@ public class ParallelSelectExtTest
                     {
                       Assert.That(results,
                                   Has.Count.EqualTo(n));
-                      // Calls running one at a time on the context thread would give 1.
-                      // Exactly parallelism is not guaranteed: the thread pool may be busy with other blocking work.
+                      // Calls running one at a time on the context thread would give 1
                       Assert.That(maxRunning,
                                   Is.GreaterThan(1));
                     });
