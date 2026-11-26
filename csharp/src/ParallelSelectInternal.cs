@@ -168,7 +168,9 @@ internal static class ParallelSelectInternal
     {
       try
       {
-        await foreach (var x in enumerable.WithCancellation(iterationToken))
+        // The source may complete on a foreign context: the producer must not capture it
+        await foreach (var x in enumerable.WithCancellation(iterationToken)
+                                          .ConfigureAwait(false))
         {
           if (bufferSem is not null)
           {
@@ -210,7 +212,9 @@ internal static class ParallelSelectInternal
 
     try
     {
-      await foreach (var item in channel.Reader.ToAsyncEnumerable(globalToken))
+      // The caller may block its context while waiting for the enumeration: it must not be captured
+      await foreach (var item in channel.Reader.ToAsyncEnumerable(globalToken)
+                                        .ConfigureAwait(false))
       {
         var res = await item.ConfigureAwait(false);
 

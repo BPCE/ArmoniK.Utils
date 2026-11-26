@@ -301,7 +301,8 @@ public static class ParallelSelectExt
                                                                    cancellationToken)
                                                           .ConfigureAwait(false);
                                                         return new ValueTuple();
-                                                      }))
+                                                      })
+                                      .ConfigureAwait(false))
     {
     }
   }

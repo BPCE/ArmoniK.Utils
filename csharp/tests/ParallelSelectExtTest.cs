@@ -1434,6 +1434,178 @@ public class ParallelSelectExtTest
     }
   }
 
+  public enum CallerKind
+  {
+    Ordered,
+    Unordered,
+    ForEach,
+  }
+
+  [Test]
+  [AbortAfter(10000)]
+  public void CallerBlockingItsContext([Values] CallerKind caller)
+  {
+    const int n = 100;
+
+    var context = new SingleThreadSynchronizationContext();
+    var tcs     = new TaskCompletionSource<int>(TaskCreationOptions.RunContinuationsAsynchronously);
+
+    async Task<int> Count()
+    {
+      var count = 0;
+      await foreach (var _ in GenerateInts(n)
+                              .ParallelSelect(new ParallelTaskOptions(caller == CallerKind.Unordered,
+                                                                      4),
+                                              Task.FromResult)
+                              .ConfigureAwait(false))
+      {
+        count += 1;
+      }
+
+      return count;
+    }
+
+    // Synchronous caller blocking the context thread until the enumeration completes
+    context.Post(_ =>
+                 {
+                   try
+                   {
+                     var count = 0;
+                     if (caller == CallerKind.ForEach)
+                     {
+                       GenerateInts(n)
+                         .ParallelForEach(new ParallelTaskOptions(4),
+                                          _ =>
+                                          {
+                                            Interlocked.Increment(ref count);
+                                            return Task.CompletedTask;
+                                          })
+                         .WaitSync();
+                     }
+                     else
+                     {
+                       count = Count()
+                         .WaitSync();
+                     }
+
+                     tcs.SetResult(count);
+                   }
+                   catch (Exception e)
+                   {
+                     tcs.SetException(e);
+                   }
+                 },
+                 null);
+
+    // A continuation posted to the blocked context would never run
+    var completed = tcs.Task.Wait(TimeSpan.FromSeconds(5));
+    if (completed)
+    {
+      // Otherwise the context thread is blocked forever, and disposing the context would wait for it
+      context.Dispose();
+    }
+
+    Assert.That(completed,
+                Is.True);
+    Assert.That(tcs.Task.Result,
+                Is.EqualTo(n));
+  }
+
+  [Test]
+  [AbortAfter(10000)]
+  public async Task SourceCompletingOnBlockedContext([Values] bool unordered)
+  {
+    const int n = 10;
+
+    // Declared first to be disposed last, once the context thread has stopped waiting on it
+    using var block   = new ManualResetEventSlim();
+    using var context = new SingleThreadSynchronizationContext();
+
+    try
+    {
+      var task = new BlockingContextSource(context,
+                                           block,
+                                           n).ParallelSelect(new ParallelTaskOptions(unordered,
+                                                                                     4),
+                                                             Task.FromResult)
+                                             .ToListAsync()
+                                             .AsTask();
+
+      // The producer would be posted to the blocked context after the first item
+      Assert.That(await Task.WhenAny(task,
+                                     Task.Delay(TimeSpan.FromSeconds(5)))
+                            .ConfigureAwait(false),
+                  Is.SameAs(task));
+      Assert.That(await task.ConfigureAwait(false),
+                  Has.Count.EqualTo(n));
+    }
+    finally
+    {
+      block.Set();
+    }
+  }
+
+  /// <summary>
+  ///   Source whose first item is completed from the given context, which is then blocked until `block` is set.
+  ///   The next items are completed from the thread pool.
+  /// </summary>
+  private sealed class BlockingContextSource(SynchronizationContext context,
+                                             ManualResetEventSlim   block,
+                                             int                    n) : IAsyncEnumerable<int>, IAsyncEnumerator<int>, IValueTaskSource<bool>
+  {
+    private ManualResetValueTaskSourceCore<bool> core_;
+
+    public IAsyncEnumerator<int> GetAsyncEnumerator(CancellationToken cancellationToken = default)
+      => this;
+
+    public int Current { get; private set; } = -1;
+
+    public ValueTask<bool> MoveNextAsync()
+    {
+      core_.Reset();
+      if (Current < 0)
+      {
+        context.Post(_ =>
+                     {
+                       // The consumer of the source continues inline on the context thread
+                       Current += 1;
+                       core_.SetResult(true);
+                       block.Wait();
+                     },
+                     null);
+      }
+      else
+      {
+        ThreadPool.QueueUserWorkItem(_ =>
+                                     {
+                                       Current += 1;
+                                       core_.SetResult(Current < n);
+                                     });
+      }
+
+      return new ValueTask<bool>(this,
+                                 core_.Version);
+    }
+
+    public ValueTask DisposeAsync()
+      => default;
+
+    public bool GetResult(short token)
+      => core_.GetResult(token);
+
+    public ValueTaskSourceStatus GetStatus(short token)
+      => core_.GetStatus(token);
+
+    public void OnCompleted(Action<object?>                 continuation,
+                            object?                         state,
+                            short                           token,
+                            ValueTaskSourceOnCompletedFlags flags)
+      => core_.OnCompleted(continuation,
+                           state,
+                           token,
+                           flags);
+  }
+
   [Test]
   [AbortAfter(10000)]
   public void SourceThrowing([Values] bool unordered)
