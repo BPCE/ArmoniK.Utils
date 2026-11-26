@@ -1313,7 +1313,7 @@ public class ParallelSelectExtTest
   public async Task MethodGroupWithAndWithoutToken([Values] bool useAsync,
                                                    [Values] bool withOptions)
   {
-    // A method group having a form with and a form without token must compile, and call the form without token
+    // A method group having a form with and a form without token must compile, and call the form with token
     const int n       = 10;
     var       f       = new OverloadedFunc();
     var       options = new ParallelTaskOptions(2);
@@ -1351,9 +1351,9 @@ public class ParallelSelectExtTest
                                 f.ForEach),
            }).ConfigureAwait(false);
 
-    Assert.That(f.WithoutToken,
-                Is.EqualTo(2 * n));
     Assert.That(f.WithToken,
+                Is.EqualTo(2 * n));
+    Assert.That(f.WithoutToken,
                 Is.Zero);
   }
 
