@@ -34,12 +34,9 @@ public static class ParallelSelectExt
   ///   The maximum number of tasks in flight at any given moment is given in the `parallelTaskOptions`.
   ///   All results are collected in-order.
   /// </summary>
-  /// <remarks>
-  ///   When the enumeration ends (fully consumed, stopped early, failed or cancelled),
-  ///   it waits for all the calls to `func` that have been started, and for the input enumerable to be disposed.
-  ///   This includes waiting for the pending fetch of the next input: if the input enumerable ignores the cancellation,
-  ///   the wait lasts until that input is available or the input enumerable ends.
-  /// </remarks>
+  /// <inheritdoc
+  ///   cref="ParallelSelect{TInput, TOutput}(IAsyncEnumerable{TInput}, ParallelTaskOptions, Func{TInput, CancellationToken, Task{TOutput}})"
+  ///   path="/remarks" />
   /// <param name="enumerable">Enumerable to iterate on</param>
   /// <param name="parallelTaskOptions">Options (eg: parallelismLimit, cancellationToken)</param>
   /// <param name="func">
@@ -95,12 +92,9 @@ public static class ParallelSelectExt
   ///   At most "number of thread" tasks will be running at any given time.
   ///   All results are collected in-order.
   /// </summary>
-  /// <remarks>
-  ///   When the enumeration ends (fully consumed, stopped early, failed or cancelled),
-  ///   it waits for all the calls to `func` that have been started, and for the input enumerable to be disposed.
-  ///   This includes waiting for the pending fetch of the next input: if the input enumerable ignores the cancellation,
-  ///   the wait lasts until that input is available or the input enumerable ends.
-  /// </remarks>
+  /// <inheritdoc
+  ///   cref="ParallelSelect{TInput, TOutput}(IAsyncEnumerable{TInput}, ParallelTaskOptions, Func{TInput, CancellationToken, Task{TOutput}})"
+  ///   path="/remarks" />
   /// <param name="enumerable">Enumerable to iterate on</param>
   /// <param name="func">
   ///   Function to spawn on the enumerable input.
@@ -121,12 +115,9 @@ public static class ParallelSelectExt
   ///   At most "number of thread" tasks will be running at any given time.
   ///   All results are collected in-order.
   /// </summary>
-  /// <remarks>
-  ///   When the enumeration ends (fully consumed, stopped early, failed or cancelled),
-  ///   it waits for all the calls to `func` that have been started, and for the input enumerable to be disposed.
-  ///   This includes waiting for the pending fetch of the next input: if the input enumerable ignores the cancellation,
-  ///   the wait lasts until that input is available or the input enumerable ends.
-  /// </remarks>
+  /// <inheritdoc
+  ///   cref="ParallelSelect{TInput, TOutput}(IAsyncEnumerable{TInput}, ParallelTaskOptions, Func{TInput, CancellationToken, Task{TOutput}})"
+  ///   path="/remarks" />
   /// <param name="enumerable">Enumerable to iterate on</param>
   /// <param name="func">
   ///   Function to spawn on the enumerable input.
@@ -147,12 +138,9 @@ public static class ParallelSelectExt
   ///   The maximum number of tasks in flight at any given moment is given in the `parallelTaskOptions`.
   ///   All results are collected in-order.
   /// </summary>
-  /// <remarks>
-  ///   When the enumeration ends (fully consumed, stopped early, failed or cancelled),
-  ///   it waits for all the calls to `func` that have been started, and for the input enumerable to be disposed.
-  ///   This includes waiting for the pending fetch of the next input: if the input enumerable ignores the cancellation,
-  ///   the wait lasts until that input is available or the input enumerable ends.
-  /// </remarks>
+  /// <inheritdoc
+  ///   cref="ParallelSelect{TInput, TOutput}(IAsyncEnumerable{TInput}, ParallelTaskOptions, Func{TInput, CancellationToken, Task{TOutput}})"
+  ///   path="/remarks" />
   /// <param name="enumerable">Enumerable to iterate on</param>
   /// <param name="parallelTaskOptions">Options (eg: parallelismLimit, cancellationToken)</param>
   /// <param name="func">Function to spawn on the enumerable input</param>
@@ -172,12 +160,9 @@ public static class ParallelSelectExt
   ///   The maximum number of tasks in flight at any given moment is given in the `parallelTaskOptions`.
   ///   All results are collected in-order.
   /// </summary>
-  /// <remarks>
-  ///   When the enumeration ends (fully consumed, stopped early, failed or cancelled),
-  ///   it waits for all the calls to `func` that have been started, and for the input enumerable to be disposed.
-  ///   This includes waiting for the pending fetch of the next input: if the input enumerable ignores the cancellation,
-  ///   the wait lasts until that input is available or the input enumerable ends.
-  /// </remarks>
+  /// <inheritdoc
+  ///   cref="ParallelSelect{TInput, TOutput}(IAsyncEnumerable{TInput}, ParallelTaskOptions, Func{TInput, CancellationToken, Task{TOutput}})"
+  ///   path="/remarks" />
   /// <param name="enumerable">Enumerable to iterate on</param>
   /// <param name="parallelTaskOptions">Options (eg: parallelismLimit, cancellationToken)</param>
   /// <param name="func">Function to spawn on the enumerable input</param>
@@ -197,12 +182,9 @@ public static class ParallelSelectExt
   ///   At most "number of thread" tasks will be running at any given time.
   ///   All results are collected in-order.
   /// </summary>
-  /// <remarks>
-  ///   When the enumeration ends (fully consumed, stopped early, failed or cancelled),
-  ///   it waits for all the calls to `func` that have been started, and for the input enumerable to be disposed.
-  ///   This includes waiting for the pending fetch of the next input: if the input enumerable ignores the cancellation,
-  ///   the wait lasts until that input is available or the input enumerable ends.
-  /// </remarks>
+  /// <inheritdoc
+  ///   cref="ParallelSelect{TInput, TOutput}(IAsyncEnumerable{TInput}, ParallelTaskOptions, Func{TInput, CancellationToken, Task{TOutput}})"
+  ///   path="/remarks" />
   /// <param name="enumerable">Enumerable to iterate on</param>
   /// <param name="func">Function to spawn on the enumerable input</param>
   /// <typeparam name="TInput">Type of the inputs</typeparam>
@@ -219,12 +201,9 @@ public static class ParallelSelectExt
   ///   At most "number of thread" tasks will be running at any given time.
   ///   All results are collected in-order.
   /// </summary>
-  /// <remarks>
-  ///   When the enumeration ends (fully consumed, stopped early, failed or cancelled),
-  ///   it waits for all the calls to `func` that have been started, and for the input enumerable to be disposed.
-  ///   This includes waiting for the pending fetch of the next input: if the input enumerable ignores the cancellation,
-  ///   the wait lasts until that input is available or the input enumerable ends.
-  /// </remarks>
+  /// <inheritdoc
+  ///   cref="ParallelSelect{TInput, TOutput}(IAsyncEnumerable{TInput}, ParallelTaskOptions, Func{TInput, CancellationToken, Task{TOutput}})"
+  ///   path="/remarks" />
   /// <param name="enumerable">Enumerable to iterate on</param>
   /// <param name="func">Function to spawn on the enumerable input</param>
   /// <typeparam name="TInput">Type of the inputs</typeparam>
@@ -241,12 +220,9 @@ public static class ParallelSelectExt
   ///   The maximum number of tasks in flight at any given moment is given in the `parallelTaskOptions`.
   ///   Tasks are not awaited in-order, whatever the value of `Unordered` in the options.
   /// </summary>
-  /// <remarks>
-  ///   When the iteration ends (fully consumed, stopped early, failed or cancelled),
-  ///   it waits for all the calls to `func` that have been started, and for the input enumerable to be disposed.
-  ///   This includes waiting for the pending fetch of the next input: if the input enumerable ignores the cancellation,
-  ///   the wait lasts until that input is available or the input enumerable ends.
-  /// </remarks>
+  /// <inheritdoc
+  ///   cref="ParallelForEach{TInput}(IAsyncEnumerable{TInput}, ParallelTaskOptions, Func{TInput, CancellationToken, Task})"
+  ///   path="/remarks" />
   /// <param name="enumerable">Enumerable to iterate on</param>
   /// <param name="parallelTaskOptions">Options (eg: parallelismLimit, cancellationToken)</param>
   /// <param name="func">
@@ -312,12 +288,9 @@ public static class ParallelSelectExt
   ///   At most "number of thread" tasks will be running at any given time.
   ///   Tasks are not awaited in-order, whatever the value of `Unordered` in the options.
   /// </summary>
-  /// <remarks>
-  ///   When the iteration ends (fully consumed, stopped early, failed or cancelled),
-  ///   it waits for all the calls to `func` that have been started, and for the input enumerable to be disposed.
-  ///   This includes waiting for the pending fetch of the next input: if the input enumerable ignores the cancellation,
-  ///   the wait lasts until that input is available or the input enumerable ends.
-  /// </remarks>
+  /// <inheritdoc
+  ///   cref="ParallelForEach{TInput}(IAsyncEnumerable{TInput}, ParallelTaskOptions, Func{TInput, CancellationToken, Task})"
+  ///   path="/remarks" />
   /// <param name="enumerable">Enumerable to iterate on</param>
   /// <param name="func">
   ///   Function to spawn on the enumerable input.
@@ -337,12 +310,9 @@ public static class ParallelSelectExt
   ///   At most "number of thread" tasks will be running at any given time.
   ///   Tasks are not awaited in-order, whatever the value of `Unordered` in the options.
   /// </summary>
-  /// <remarks>
-  ///   When the iteration ends (fully consumed, stopped early, failed or cancelled),
-  ///   it waits for all the calls to `func` that have been started, and for the input enumerable to be disposed.
-  ///   This includes waiting for the pending fetch of the next input: if the input enumerable ignores the cancellation,
-  ///   the wait lasts until that input is available or the input enumerable ends.
-  /// </remarks>
+  /// <inheritdoc
+  ///   cref="ParallelForEach{TInput}(IAsyncEnumerable{TInput}, ParallelTaskOptions, Func{TInput, CancellationToken, Task})"
+  ///   path="/remarks" />
   /// <param name="enumerable">Enumerable to iterate on</param>
   /// <param name="func">
   ///   Function to spawn on the enumerable input.
@@ -362,12 +332,9 @@ public static class ParallelSelectExt
   ///   The maximum number of tasks in flight at any given moment is given in the `parallelTaskOptions`.
   ///   Tasks are not awaited in-order, whatever the value of `Unordered` in the options.
   /// </summary>
-  /// <remarks>
-  ///   When the iteration ends (fully consumed, stopped early, failed or cancelled),
-  ///   it waits for all the calls to `func` that have been started, and for the input enumerable to be disposed.
-  ///   This includes waiting for the pending fetch of the next input: if the input enumerable ignores the cancellation,
-  ///   the wait lasts until that input is available or the input enumerable ends.
-  /// </remarks>
+  /// <inheritdoc
+  ///   cref="ParallelForEach{TInput}(IAsyncEnumerable{TInput}, ParallelTaskOptions, Func{TInput, CancellationToken, Task})"
+  ///   path="/remarks" />
   /// <param name="enumerable">Enumerable to iterate on</param>
   /// <param name="parallelTaskOptions">Options (eg: parallelismLimit, cancellationToken)</param>
   /// <param name="func">Function to spawn on the enumerable input</param>
@@ -386,12 +353,9 @@ public static class ParallelSelectExt
   ///   The maximum number of tasks in flight at any given moment is given in the `parallelTaskOptions`.
   ///   Tasks are not awaited in-order, whatever the value of `Unordered` in the options.
   /// </summary>
-  /// <remarks>
-  ///   When the iteration ends (fully consumed, stopped early, failed or cancelled),
-  ///   it waits for all the calls to `func` that have been started, and for the input enumerable to be disposed.
-  ///   This includes waiting for the pending fetch of the next input: if the input enumerable ignores the cancellation,
-  ///   the wait lasts until that input is available or the input enumerable ends.
-  /// </remarks>
+  /// <inheritdoc
+  ///   cref="ParallelForEach{TInput}(IAsyncEnumerable{TInput}, ParallelTaskOptions, Func{TInput, CancellationToken, Task})"
+  ///   path="/remarks" />
   /// <param name="enumerable">Enumerable to iterate on</param>
   /// <param name="parallelTaskOptions">Options (eg: parallelismLimit, cancellationToken)</param>
   /// <param name="func">Function to spawn on the enumerable input</param>
@@ -410,12 +374,9 @@ public static class ParallelSelectExt
   ///   At most "number of thread" tasks will be running at any given time.
   ///   Tasks are not awaited in-order, whatever the value of `Unordered` in the options.
   /// </summary>
-  /// <remarks>
-  ///   When the iteration ends (fully consumed, stopped early, failed or cancelled),
-  ///   it waits for all the calls to `func` that have been started, and for the input enumerable to be disposed.
-  ///   This includes waiting for the pending fetch of the next input: if the input enumerable ignores the cancellation,
-  ///   the wait lasts until that input is available or the input enumerable ends.
-  /// </remarks>
+  /// <inheritdoc
+  ///   cref="ParallelForEach{TInput}(IAsyncEnumerable{TInput}, ParallelTaskOptions, Func{TInput, CancellationToken, Task})"
+  ///   path="/remarks" />
   /// <param name="enumerable">Enumerable to iterate on</param>
   /// <param name="func">Function to spawn on the enumerable input</param>
   /// <typeparam name="TInput">Type of the inputs</typeparam>
@@ -431,12 +392,9 @@ public static class ParallelSelectExt
   ///   At most "number of thread" tasks will be running at any given time.
   ///   Tasks are not awaited in-order, whatever the value of `Unordered` in the options.
   /// </summary>
-  /// <remarks>
-  ///   When the iteration ends (fully consumed, stopped early, failed or cancelled),
-  ///   it waits for all the calls to `func` that have been started, and for the input enumerable to be disposed.
-  ///   This includes waiting for the pending fetch of the next input: if the input enumerable ignores the cancellation,
-  ///   the wait lasts until that input is available or the input enumerable ends.
-  /// </remarks>
+  /// <inheritdoc
+  ///   cref="ParallelForEach{TInput}(IAsyncEnumerable{TInput}, ParallelTaskOptions, Func{TInput, CancellationToken, Task})"
+  ///   path="/remarks" />
   /// <param name="enumerable">Enumerable to iterate on</param>
   /// <param name="func">Function to spawn on the enumerable input</param>
   /// <typeparam name="TInput">Type of the inputs</typeparam>
