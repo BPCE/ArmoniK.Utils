@@ -21,6 +21,7 @@ using System.Linq;
 using System.Runtime.CompilerServices;
 using System.Threading;
 using System.Threading.Tasks;
+using System.Threading.Tasks.Sources;
 
 using NUnit.Framework;
 
@@ -356,43 +357,48 @@ public class ParallelSelectExtTest
                              ? (1000, -1)
                              : (processorCount, processorCount);
 
-    var cts = new CancellationTokenSource();
-    var cancellationToken = cancellationAware
-                              ? cts.Token
-                              : CancellationToken.None;
-
+    var nbStarted  = 0;
     var nbFinished = 0;
 
-    async Task<int> F(int x)
+    async Task<int> F(int               x,
+                      CancellationToken cancellationToken)
     {
+      Interlocked.Increment(ref nbStarted);
+
       if (x == n - 1)
       {
         throw new ApplicationException();
       }
 
-      await Task.Delay(100,
-                       cancellationToken)
+      await Task.Delay(500,
+                       cancellationAware
+                         ? cancellationToken
+                         : CancellationToken.None)
                 .ConfigureAwait(false);
-      Interlocked.Increment(ref x);
+      Interlocked.Increment(ref nbFinished);
       return x;
     }
 
-    var enumerable = GenerateAndSelect(useAsync,
-                                       true,
-                                       parallelism,
-                                       null,
-                                       n,
-                                       F);
+    var options = new ParallelTaskOptions(true,
+                                          parallelism);
+    var enumerable = useAsync
+                       ? GenerateIntsAsync(n)
+                         .ParallelSelect(options,
+                                         F)
+                       : GenerateInts(n)
+                         .ParallelSelect(options,
+                                         F);
 
     await using var enumerator = enumerable.GetAsyncEnumerator(CancellationToken.None);
 
     Assert.That(enumerator.MoveNextAsync,
                 Throws.TypeOf<ApplicationException>());
 
-    await Task.Delay(200,
-                     CancellationToken.None);
+    // The error cancels the other tasks, and is thrown once they have all completed
     Assert.That(nbFinished,
-                Is.Zero);
+                Is.EqualTo(cancellationAware
+                             ? 0
+                             : nbStarted - 1));
   }
 
   [Test]
@@ -677,6 +683,1087 @@ public class ParallelSelectExtTest
 
     Assert.That(maxEntered,
                 Is.LessThan(cancelAt));
+  }
+
+  public static readonly (int parallelism, int? bufferLimit)[] BufferLimitCases =
+  {
+    (2, null),
+    (2, 10),
+    (10, 3),
+    (2, -1),
+    (-1, null),
+  };
+
+  [Test]
+  [AbortAfter(10000)]
+  public async Task BufferLimit([ValueSource(nameof(BufferLimitCases))] (int parallelism, int? bufferLimit) param,
+                                [Values]                                bool                                unordered,
+                                [Values]                                bool                                useAsync)
+  {
+    const int n          = 100;
+    var       started    = 0;
+    var       running    = 0;
+    var       maxRunning = 0;
+    var       tcs        = new TaskCompletionSource<int>(TaskCreationOptions.RunContinuationsAsynchronously);
+
+    // The first task is blocked until the test releases it, the other ones complete right away
+    async Task<int> F(int x)
+    {
+      Interlocked.Increment(ref started);
+      InterlockedMax(ref maxRunning,
+                     Interlocked.Increment(ref running));
+
+      if (x == 0)
+      {
+        await tcs.Task.ConfigureAwait(false);
+      }
+      else
+      {
+        await Task.Yield();
+      }
+
+      Interlocked.Decrement(ref running);
+      return x;
+    }
+
+    var options = new ParallelTaskOptions(unordered,
+                                          param.parallelism)
+                  {
+                    BufferLimit = param.bufferLimit ?? 0,
+                  };
+
+    var enumerable = useAsync
+                       ? GenerateIntsAsync(n)
+                         .ParallelSelect(options,
+                                         F)
+                       : GenerateInts(n)
+                         .ParallelSelect(options,
+                                         F);
+
+    // A negative limit means no limit
+    var parallelism = param.parallelism < 0
+                        ? n
+                        : param.parallelism;
+    var bufferLimit = (param.bufferLimit ?? param.parallelism) switch
+                      {
+                        < 0   => n,
+                        var l => l,
+                      };
+    // In unordered mode, the first result yielded leaves the buffer
+    var expectedStarted = bufferLimit >= n
+                            ? n
+                            : unordered
+                              ? bufferLimit + 1
+                              : bufferLimit;
+
+    await using var enumerator = enumerable.GetAsyncEnumerator();
+
+    // Ordered: blocked on the first task, unordered: gets the first completed task
+    var first = enumerator.MoveNextAsync();
+
+    while (started < expectedStarted)
+    {
+      await Task.Delay(10)
+                .ConfigureAwait(false);
+    }
+
+    // Leave some time for an extra task to start if the limit was not enforced
+    await Task.Delay(100)
+              .ConfigureAwait(false);
+
+    Assert.Multiple(() =>
+                    {
+                      Assert.That(started,
+                                  Is.EqualTo(expectedStarted));
+                      Assert.That(maxRunning,
+                                  Is.LessThanOrEqualTo(Math.Min(parallelism,
+                                                                bufferLimit)));
+                    });
+
+    tcs.SetResult(0);
+
+    var results = new List<int>();
+    if (await first.ConfigureAwait(false))
+    {
+      results.Add(enumerator.Current);
+    }
+
+    while (await enumerator.MoveNextAsync()
+                           .ConfigureAwait(false))
+    {
+      results.Add(enumerator.Current);
+    }
+
+    if (unordered)
+    {
+      results.Sort();
+    }
+
+    Assert.That(results,
+                Is.EqualTo(GenerateInts(n)));
+  }
+
+  [Test]
+  [AbortAfter(10000)]
+  public async Task ParallelForeachSlowTask([Values] bool  useAsync,
+                                            [Values] bool? unordered)
+  {
+    const int n    = 20;
+    var       done = 0;
+    var       tcs  = new TaskCompletionSource<int>(TaskCreationOptions.RunContinuationsAsynchronously);
+
+    async Task F(int x)
+    {
+      if (x == 0)
+      {
+        await tcs.Task.ConfigureAwait(false);
+      }
+      else
+      {
+        await Task.Yield();
+      }
+
+      Interlocked.Increment(ref done);
+    }
+
+    var options = new ParallelTaskOptions(unordered ?? false,
+                                          2);
+
+    var task = useAsync
+                 ? GenerateIntsAsync(n)
+                   .ParallelForEach(options,
+                                    F)
+                 : GenerateInts(n)
+                   .ParallelForEach(options,
+                                    F);
+
+    // All the other tasks complete while the first one is blocked, whatever the order option
+    while (done < n - 1)
+    {
+      await Task.Delay(10)
+                .ConfigureAwait(false);
+    }
+
+    Assert.That(task.IsCompleted,
+                Is.False);
+
+    tcs.SetResult(0);
+    await task.ConfigureAwait(false);
+
+    Assert.That(done,
+                Is.EqualTo(n));
+  }
+
+  [Test]
+  [AbortAfter(30000)]
+  public async Task NoUnobservedException([Values] bool unordered,
+                                          [Values] bool throwing)
+  {
+    // Flush the garbage from previous tests
+    GC.Collect();
+    GC.WaitForPendingFinalizers();
+
+    var unobserved = new ConcurrentBag<Exception>();
+
+    void Handler(object?                          sender,
+                 UnobservedTaskExceptionEventArgs e)
+    {
+      unobserved.Add(e.Exception);
+      e.SetObserved();
+    }
+
+    TaskScheduler.UnobservedTaskException += Handler;
+
+    try
+    {
+      for (var i = 0; i < 20; ++i)
+      {
+        var enumerable = GenerateInts(100)
+          .ParallelSelect(new ParallelTaskOptions(unordered,
+                                                  8),
+                          async x =>
+                          {
+                            await Task.Delay(10)
+                                      .ConfigureAwait(false);
+                            if (throwing && x % 2 == 0)
+                            {
+                              throw new ApplicationException();
+                            }
+
+                            return x;
+                          });
+
+        if (throwing)
+        {
+          Assert.That(() => enumerable.ToListAsync()
+                                      .AsTask(),
+                      Throws.TypeOf<ApplicationException>());
+        }
+        else
+        {
+          // Stop the enumeration while tasks are still running
+          await foreach (var _ in enumerable.ConfigureAwait(false))
+          {
+            break;
+          }
+        }
+      }
+
+      // Let the remaining tasks finish
+      await Task.Delay(200)
+                .ConfigureAwait(false);
+
+      GC.Collect();
+      GC.WaitForPendingFinalizers();
+      GC.Collect();
+    }
+    finally
+    {
+      TaskScheduler.UnobservedTaskException -= Handler;
+    }
+
+    Assert.That(unobserved,
+                Is.Empty);
+  }
+
+  [Test]
+  [AbortAfter(30000)]
+  public async Task UndisposedEnumeratorDoesNotLeak([Values] bool unordered)
+  {
+    // Long-lived token, like an application lifetime token
+    using var cts = new CancellationTokenSource();
+
+    const int n      = 10000;
+    const int rounds = 3;
+
+    // Some memory is retained for reuse, up to the peak usage of a round: thread pool queues, and the registration
+    // nodes of cancellationToken. A leak grows with each round instead: the measurement starts after warm-up rounds.
+    var before = 0L;
+    for (var round = 0; round < 2; ++round)
+    {
+      for (var i = 0; i < n; ++i)
+      {
+        await StartEnumerationAndForget(unordered,
+                                        cts.Token)
+          .ConfigureAwait(false);
+      }
+
+      before = await CollectAndMeasure()
+                 .ConfigureAwait(false);
+    }
+
+    var after = before;
+    for (var round = 0; round < rounds; ++round)
+    {
+      for (var i = 0; i < n; ++i)
+      {
+        await StartEnumerationAndForget(unordered,
+                                        cts.Token)
+          .ConfigureAwait(false);
+      }
+
+      // Finalize the abandoned enumerations of this round, so that the peak usage stays the one of a single round
+      after = await CollectAndMeasure()
+                .ConfigureAwait(false);
+    }
+
+    // Each enumeration used to leave about 150 bytes registered on the token (4.3 MB in total),
+    // while the memory retained for reuse varies by up to about 0.3 MB
+    Assert.That(after - before,
+                Is.LessThan(rounds * n * 50));
+  }
+
+  [MethodImpl(MethodImplOptions.NoInlining)]
+  private static async Task StartEnumerationAndForget(bool              unordered,
+                                                      CancellationToken cancellationToken)
+  {
+    var enumerator = GenerateInts(10)
+                     .ParallelSelect(new ParallelTaskOptions(unordered,
+                                                             2,
+                                                             cancellationToken),
+                                     Task.FromResult)
+                     .GetAsyncEnumerator();
+
+    await enumerator.MoveNextAsync()
+                    .ConfigureAwait(false);
+  }
+
+  private static async Task<long> CollectAndMeasure()
+  {
+    // Let the abandoned enumerations be finalized, and their tasks complete,
+    // until the memory stops decreasing
+    var memory = long.MaxValue;
+    for (var i = 0; i < 100; ++i)
+    {
+      GC.Collect();
+      GC.WaitForPendingFinalizers();
+      await Task.Delay(50)
+                .ConfigureAwait(false);
+
+      var current = GC.GetTotalMemory(true);
+      if (current >= memory)
+      {
+        return current;
+      }
+
+      memory = current;
+    }
+
+    return memory;
+  }
+
+  public enum ExitKind
+  {
+    Break,
+    Throw,
+    Cancel,
+  }
+
+  [Test]
+  [AbortAfter(10000)]
+  public async Task ExitWaitsForRunningTasks([Values] bool     unordered,
+                                             [Values] ExitKind exit,
+                                             [Values] bool     cancellationAware)
+  {
+    const int throwAt = 5;
+    var       running = 0;
+    var       cts     = new CancellationTokenSource();
+
+    // Inputs before throwAt complete right away, the following ones are slow.
+    // When cancellation aware, only the cancellation can end the slow ones.
+    async Task<int> F(int               x,
+                      CancellationToken cancellationToken)
+    {
+      Interlocked.Increment(ref running);
+      try
+      {
+        if (x < throwAt)
+        {
+          await Task.Yield();
+          return x;
+        }
+
+        if (exit == ExitKind.Throw && x == throwAt)
+        {
+          throw new ApplicationException();
+        }
+
+        await Task.Delay(cancellationAware
+                           ? Timeout.Infinite
+                           : 200,
+                         cancellationAware
+                           ? cancellationToken
+                           : CancellationToken.None)
+                  .ConfigureAwait(false);
+        return x;
+      }
+      finally
+      {
+        Interlocked.Decrement(ref running);
+      }
+    }
+
+    var enumerable = GenerateInts(100)
+      .ParallelSelect(new ParallelTaskOptions(unordered,
+                                              10,
+                                              cts.Token),
+                      F);
+
+    async Task Consume()
+    {
+      await foreach (var _ in enumerable.WithCancellation(CancellationToken.None))
+      {
+        switch (exit)
+        {
+          case ExitKind.Break:
+            return;
+          case ExitKind.Cancel:
+            cts.Cancel();
+            break;
+        }
+      }
+    }
+
+    switch (exit)
+    {
+      case ExitKind.Break:
+        await Consume()
+          .ConfigureAwait(false);
+        break;
+      case ExitKind.Throw:
+        Assert.That(async () => await Consume()
+                                  .ConfigureAwait(false),
+                    Throws.TypeOf<ApplicationException>());
+        break;
+      case ExitKind.Cancel:
+        Assert.That(async () => await Consume()
+                                  .ConfigureAwait(false),
+                    Throws.InstanceOf<OperationCanceledException>());
+        break;
+    }
+
+    // No task is still running once the enumeration has ended
+    Assert.That(running,
+                Is.Zero);
+  }
+
+  [Test]
+  [AbortAfter(10000)]
+  public async Task ThrowingCancellationCallback([Values] bool unordered,
+                                                 [Values] bool throwing)
+  {
+    // Flush the garbage from previous tests
+    GC.Collect();
+    GC.WaitForPendingFinalizers();
+
+    const int throwAt    = 5;
+    var       unobserved = new ConcurrentBag<Exception>();
+
+    // The enumeration ends once a callback is registered, so that the callback runs inside Cancel and not inside Register.
+    // With a parallelism of 10, the inputs after throwAt are started without waiting for the previous results.
+    var registered = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
+
+    void Handler(object?                          sender,
+                 UnobservedTaskExceptionEventArgs e)
+    {
+      unobserved.Add(e.Exception);
+      e.SetObserved();
+    }
+
+    // Inputs before throwAt complete right away, the following ones wait for their cancellation,
+    // and register a callback that throws when cancelled
+    async Task<int> F(int               x,
+                      CancellationToken cancellationToken)
+    {
+      if (x < throwAt)
+      {
+        await Task.Yield();
+        return x;
+      }
+
+      if (throwing && x == throwAt)
+      {
+        await registered.Task.ConfigureAwait(false);
+        throw new ApplicationException();
+      }
+
+      // The callback is the only registration on the token: another one could unregister it before it runs
+      var cancelled = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
+      using var registration = cancellationToken.Register(() =>
+                                                          {
+                                                            cancelled.SetResult(true);
+                                                            throw new InvalidOperationException();
+                                                          });
+      registered.TrySetResult(true);
+      await cancelled.Task.ConfigureAwait(false);
+      cancellationToken.ThrowIfCancellationRequested();
+      return x;
+    }
+
+    async Task Consume()
+    {
+      await foreach (var _ in GenerateInts(100)
+                              .ParallelSelect(new ParallelTaskOptions(unordered,
+                                                                      10),
+                                              F)
+                              .ConfigureAwait(false))
+      {
+        if (!throwing)
+        {
+          await registered.Task.ConfigureAwait(false);
+          break;
+        }
+      }
+    }
+
+    TaskScheduler.UnobservedTaskException += Handler;
+
+    try
+    {
+      // The errors of the callbacks neither replace the error of func, nor make stopping early throw
+      if (throwing)
+      {
+        Assert.That(async () => await Consume()
+                                  .ConfigureAwait(false),
+                    Throws.TypeOf<ApplicationException>());
+      }
+      else
+      {
+        Assert.That(async () => await Consume()
+                                  .ConfigureAwait(false),
+                    Throws.Nothing);
+      }
+
+      GC.Collect();
+      GC.WaitForPendingFinalizers();
+      GC.Collect();
+    }
+    finally
+    {
+      TaskScheduler.UnobservedTaskException -= Handler;
+    }
+
+    Assert.That(unobserved,
+                Is.Empty);
+  }
+
+  [Test]
+  [AbortAfter(10000)]
+  public async Task ThrowingCancellationCallbackOnFinalizer([Values] bool unordered)
+  {
+    var cancelled = new StrongBox<int>();
+
+    await StartWithThrowingCallbackAndForget(unordered,
+                                             cancelled)
+      .ConfigureAwait(false);
+
+    // The finalizer of the enumeration cancels the calls: the errors of their callbacks must not crash the process
+    while (Volatile.Read(ref cancelled.Value) == 0)
+    {
+      GC.Collect();
+      GC.WaitForPendingFinalizers();
+      await Task.Delay(10)
+                .ConfigureAwait(false);
+    }
+  }
+
+  [MethodImpl(MethodImplOptions.NoInlining)]
+  private static async Task StartWithThrowingCallbackAndForget(bool           unordered,
+                                                               StrongBox<int> cancelled)
+  {
+    // The first input completes right away, the following ones wait for their cancellation,
+    // and register a callback that throws when cancelled
+    async Task<int> F(int               x,
+                      CancellationToken cancellationToken)
+    {
+      if (x == 0)
+      {
+        await Task.Yield();
+        return x;
+      }
+
+      // The callback is the only registration on the token: another one could unregister it before it runs
+      var tcs = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
+      using var registration = cancellationToken.Register(() =>
+                                                          {
+                                                            Interlocked.Increment(ref cancelled.Value);
+                                                            tcs.SetResult(true);
+                                                            throw new InvalidOperationException();
+                                                          });
+      await tcs.Task.ConfigureAwait(false);
+      cancellationToken.ThrowIfCancellationRequested();
+      return x;
+    }
+
+    var enumerator = GenerateInts(10)
+                     .ParallelSelect(new ParallelTaskOptions(unordered,
+                                                             4),
+                                     F)
+                     .GetAsyncEnumerator();
+
+    await enumerator.MoveNextAsync()
+                    .ConfigureAwait(false);
+  }
+
+  [Test]
+  [AbortAfter(10000)]
+  public void ParallelForeachCancelsOnError([Values] bool useAsync)
+  {
+    var running = 0;
+
+    // Only the cancellation can end the tasks that do not throw
+    async Task F(int               x,
+                 CancellationToken cancellationToken)
+    {
+      Interlocked.Increment(ref running);
+      try
+      {
+        if (x == 5)
+        {
+          throw new ApplicationException();
+        }
+
+        await Task.Delay(Timeout.Infinite,
+                         cancellationToken)
+                  .ConfigureAwait(false);
+      }
+      finally
+      {
+        Interlocked.Decrement(ref running);
+      }
+    }
+
+    var options = new ParallelTaskOptions(10);
+    var task = useAsync
+                 ? GenerateIntsAsync(100)
+                   .ParallelForEach(options,
+                                    F)
+                 : GenerateInts(100)
+                   .ParallelForEach(options,
+                                    F);
+
+    Assert.That(() => task,
+                Throws.TypeOf<ApplicationException>());
+    Assert.That(running,
+                Is.Zero);
+  }
+
+  [Test]
+  [AbortAfter(10000)]
+  public async Task MethodGroupWithAndWithoutToken([Values] bool useAsync,
+                                                   [Values] bool withOptions)
+  {
+    // A method group having a form with and a form without token must compile, and call the form with token
+    const int n       = 10;
+    var       f       = new OverloadedFunc();
+    var       options = new ParallelTaskOptions(2);
+
+    var selected = (useAsync, withOptions) switch
+                   {
+                     (false, false) => GenerateInts(n)
+                       .ParallelSelect(f.Select),
+                     (false, true) => GenerateInts(n)
+                       .ParallelSelect(options,
+                                       f.Select),
+                     (true, false) => GenerateIntsAsync(n)
+                       .ParallelSelect(f.Select),
+                     (true, true) => GenerateIntsAsync(n)
+                       .ParallelSelect(options,
+                                       f.Select),
+                   };
+
+    Assert.That(await selected.ToListAsync()
+                              .ConfigureAwait(false),
+                Is.EqualTo(Enumerable.Range(0,
+                                            n)));
+
+    await ((useAsync, withOptions) switch
+           {
+             (false, false) => GenerateInts(n)
+               .ParallelForEach(f.ForEach),
+             (false, true) => GenerateInts(n)
+               .ParallelForEach(options,
+                                f.ForEach),
+             (true, false) => GenerateIntsAsync(n)
+               .ParallelForEach(f.ForEach),
+             (true, true) => GenerateIntsAsync(n)
+               .ParallelForEach(options,
+                                f.ForEach),
+           }).ConfigureAwait(false);
+
+    Assert.That(f.WithToken,
+                Is.EqualTo(2 * n));
+    Assert.That(f.WithoutToken,
+                Is.Zero);
+  }
+
+  /// <summary>
+  ///   Methods having a form with and a form without token, as `Task.Delay`
+  /// </summary>
+  private sealed class OverloadedFunc
+  {
+    public int WithToken;
+    public int WithoutToken;
+
+    public Task<int> Select(int x)
+    {
+      Interlocked.Increment(ref WithoutToken);
+      return Task.FromResult(x);
+    }
+
+    public Task<int> Select(int               x,
+                            CancellationToken cancellationToken)
+    {
+      Interlocked.Increment(ref WithToken);
+      return Task.FromResult(x);
+    }
+
+    public Task ForEach(int x)
+    {
+      Interlocked.Increment(ref WithoutToken);
+      return Task.CompletedTask;
+    }
+
+    public Task ForEach(int               x,
+                        CancellationToken cancellationToken)
+    {
+      Interlocked.Increment(ref WithToken);
+      return Task.CompletedTask;
+    }
+  }
+
+  [Test]
+  [AbortAfter(10000)]
+  public async Task SynchronousFuncWithForeignContext([Values] bool unordered)
+  {
+    const int n           = 16;
+    const int parallelism = 4;
+
+    // The calls must not wait for the thread pool to grow, even if it is busy with blocking work from other tests
+    ThreadPool.GetMinThreads(out var minWorkerThreads,
+                             out var minCompletionPortThreads);
+    Assert.That(ThreadPool.SetMinThreads(minWorkerThreads + 64,
+                                         minCompletionPortThreads),
+                Is.True);
+    try
+    {
+      await RunSynchronousFuncWithForeignContext(unordered,
+                                                 n,
+                                                 parallelism)
+        .ConfigureAwait(false);
+    }
+    finally
+    {
+      ThreadPool.SetMinThreads(minWorkerThreads,
+                               minCompletionPortThreads);
+    }
+  }
+
+  private static async Task RunSynchronousFuncWithForeignContext(bool unordered,
+                                                                 int  n,
+                                                                 int  parallelism)
+  {
+    using var context = new SingleThreadSynchronizationContext();
+
+    var running    = 0;
+    var maxRunning = 0;
+
+    // Fully synchronous function: parallelism relies on ParallelSelect running it on the thread pool
+    Task<int> F(int x)
+    {
+      InterlockedMax(ref maxRunning,
+                     Interlocked.Increment(ref running));
+      Thread.Sleep(50);
+      Interlocked.Decrement(ref running);
+      return Task.FromResult(x);
+    }
+
+    var results = await new ContextSource(context,
+                                          n).ParallelSelect(new ParallelTaskOptions(unordered,
+                                                                                    parallelism),
+                                                            F)
+                                            .ToListAsync()
+                                            .ConfigureAwait(false);
+
+    Assert.Multiple(() =>
+                    {
+                      Assert.That(results,
+                                  Has.Count.EqualTo(n));
+                      // Calls running one at a time on the context thread would give 1
+                      Assert.That(maxRunning,
+                                  Is.GreaterThan(1));
+                    });
+  }
+
+  /// <summary>
+  ///   Source whose items are completed from the given context, without the inlining protection of Task:
+  ///   the consumer of the source continues on the context thread.
+  /// </summary>
+  private sealed class ContextSource(SynchronizationContext context,
+                                     int                    n) : IAsyncEnumerable<int>, IAsyncEnumerator<int>, IValueTaskSource<bool>
+  {
+    private ManualResetValueTaskSourceCore<bool> core_;
+
+    public IAsyncEnumerator<int> GetAsyncEnumerator(CancellationToken cancellationToken = default)
+      => this;
+
+    public int Current { get; private set; } = -1;
+
+    public ValueTask<bool> MoveNextAsync()
+    {
+      core_.Reset();
+      context.Post(_ =>
+                   {
+                     Current += 1;
+                     core_.SetResult(Current < n);
+                   },
+                   null);
+      return new ValueTask<bool>(this,
+                                 core_.Version);
+    }
+
+    public ValueTask DisposeAsync()
+      => default;
+
+    public bool GetResult(short token)
+      => core_.GetResult(token);
+
+    public ValueTaskSourceStatus GetStatus(short token)
+      => core_.GetStatus(token);
+
+    public void OnCompleted(Action<object?>                 continuation,
+                            object?                         state,
+                            short                           token,
+                            ValueTaskSourceOnCompletedFlags flags)
+      => core_.OnCompleted(continuation,
+                           state,
+                           token,
+                           flags);
+  }
+
+  private sealed class SingleThreadSynchronizationContext : SynchronizationContext, IDisposable
+  {
+    private readonly BlockingCollection<(SendOrPostCallback callback, object? state)> queue_ = new();
+    private readonly Thread                                                           thread_;
+
+    public SingleThreadSynchronizationContext()
+    {
+      thread_ = new Thread(() =>
+                           {
+                             SetSynchronizationContext(this);
+                             foreach (var (callback, state) in queue_.GetConsumingEnumerable())
+                             {
+                               callback(state);
+                             }
+                           })
+                {
+                  IsBackground = true,
+                };
+      thread_.Start();
+    }
+
+    public void Dispose()
+    {
+      queue_.CompleteAdding();
+      thread_.Join();
+      queue_.Dispose();
+    }
+
+    public override void Post(SendOrPostCallback d,
+                              object?            state)
+    {
+      try
+      {
+        queue_.Add((d, state));
+      }
+      catch (InvalidOperationException)
+      {
+        // The context is disposed: run the callback on the thread pool instead
+        ThreadPool.QueueUserWorkItem(_ => d(state));
+      }
+    }
+  }
+
+  public enum CallerKind
+  {
+    Ordered,
+    Unordered,
+    ForEach,
+  }
+
+  [Test]
+  [AbortAfter(10000)]
+  public void CallerBlockingItsContext([Values] CallerKind caller)
+  {
+    const int n = 100;
+
+    var context = new SingleThreadSynchronizationContext();
+    var tcs     = new TaskCompletionSource<int>(TaskCreationOptions.RunContinuationsAsynchronously);
+
+    async Task<int> Count()
+    {
+      var count = 0;
+      await foreach (var _ in GenerateInts(n)
+                              .ParallelSelect(new ParallelTaskOptions(caller == CallerKind.Unordered,
+                                                                      4),
+                                              Task.FromResult)
+                              .ConfigureAwait(false))
+      {
+        count += 1;
+      }
+
+      return count;
+    }
+
+    // Synchronous caller blocking the context thread until the enumeration completes
+    context.Post(_ =>
+                 {
+                   try
+                   {
+                     var count = 0;
+                     if (caller == CallerKind.ForEach)
+                     {
+                       GenerateInts(n)
+                         .ParallelForEach(new ParallelTaskOptions(4),
+                                          _ =>
+                                          {
+                                            Interlocked.Increment(ref count);
+                                            return Task.CompletedTask;
+                                          })
+                         .WaitSync();
+                     }
+                     else
+                     {
+                       count = Count()
+                         .WaitSync();
+                     }
+
+                     tcs.SetResult(count);
+                   }
+                   catch (Exception e)
+                   {
+                     tcs.SetException(e);
+                   }
+                 },
+                 null);
+
+    // A continuation posted to the blocked context would never run
+    var completed = tcs.Task.Wait(TimeSpan.FromSeconds(5));
+    if (completed)
+    {
+      // Otherwise the context thread is blocked forever, and disposing the context would wait for it
+      context.Dispose();
+    }
+
+    Assert.That(completed,
+                Is.True);
+    Assert.That(tcs.Task.Result,
+                Is.EqualTo(n));
+  }
+
+  [Test]
+  [AbortAfter(10000)]
+  public async Task SourceCompletingOnBlockedContext([Values] bool unordered)
+  {
+    const int n = 10;
+
+    // Declared first to be disposed last, once the context thread has stopped waiting on it
+    using var block   = new ManualResetEventSlim();
+    using var context = new SingleThreadSynchronizationContext();
+
+    try
+    {
+      var task = new BlockingContextSource(context,
+                                           block,
+                                           n).ParallelSelect(new ParallelTaskOptions(unordered,
+                                                                                     4),
+                                                             Task.FromResult)
+                                             .ToListAsync()
+                                             .AsTask();
+
+      // The producer would be posted to the blocked context after the first item
+      Assert.That(await Task.WhenAny(task,
+                                     Task.Delay(TimeSpan.FromSeconds(5)))
+                            .ConfigureAwait(false),
+                  Is.SameAs(task));
+      Assert.That(await task.ConfigureAwait(false),
+                  Has.Count.EqualTo(n));
+    }
+    finally
+    {
+      block.Set();
+    }
+  }
+
+  /// <summary>
+  ///   Source whose first item is completed from the given context, which is then blocked until `block` is set.
+  ///   The next items are completed from the thread pool.
+  /// </summary>
+  private sealed class BlockingContextSource(SynchronizationContext context,
+                                             ManualResetEventSlim   block,
+                                             int                    n) : IAsyncEnumerable<int>, IAsyncEnumerator<int>, IValueTaskSource<bool>
+  {
+    private ManualResetValueTaskSourceCore<bool> core_;
+
+    public IAsyncEnumerator<int> GetAsyncEnumerator(CancellationToken cancellationToken = default)
+      => this;
+
+    public int Current { get; private set; } = -1;
+
+    public ValueTask<bool> MoveNextAsync()
+    {
+      core_.Reset();
+      if (Current < 0)
+      {
+        context.Post(_ =>
+                     {
+                       // The consumer of the source continues inline on the context thread
+                       Current += 1;
+                       core_.SetResult(true);
+                       block.Wait();
+                     },
+                     null);
+      }
+      else
+      {
+        ThreadPool.QueueUserWorkItem(_ =>
+                                     {
+                                       Current += 1;
+                                       core_.SetResult(Current < n);
+                                     });
+      }
+
+      return new ValueTask<bool>(this,
+                                 core_.Version);
+    }
+
+    public ValueTask DisposeAsync()
+      => default;
+
+    public bool GetResult(short token)
+      => core_.GetResult(token);
+
+    public ValueTaskSourceStatus GetStatus(short token)
+      => core_.GetStatus(token);
+
+    public void OnCompleted(Action<object?>                 continuation,
+                            object?                         state,
+                            short                           token,
+                            ValueTaskSourceOnCompletedFlags flags)
+      => core_.OnCompleted(continuation,
+                           state,
+                           token,
+                           flags);
+  }
+
+  [Test]
+  [AbortAfter(10000)]
+  public void SourceThrowing([Values] bool unordered)
+  {
+    const int n = 20;
+
+    async IAsyncEnumerable<int> Source()
+    {
+      for (var i = 0; i < n; ++i)
+      {
+        await Task.Yield();
+        yield return i;
+      }
+
+      throw new ApplicationException();
+    }
+
+    var results = new List<int>();
+
+    Assert.That(async () =>
+                {
+                  await foreach (var x in Source()
+                                   .ParallelSelect(new ParallelTaskOptions(unordered,
+                                                                           4),
+                                                   async x =>
+                                                   {
+                                                     await Task.Delay(10)
+                                                               .ConfigureAwait(false);
+                                                     return x;
+                                                   }))
+                  {
+                    results.Add(x);
+                  }
+                },
+                Throws.TypeOf<ApplicationException>());
+
+    if (unordered)
+    {
+      // The error is reported as soon as it occurs: results of the inputs still running are discarded
+      Assert.That(results,
+                  Is.Unique.And.SubsetOf(GenerateInts(n)));
+    }
+    else
+    {
+      // The error is reported after the results of all the inputs read before it
+      Assert.That(results,
+                  Is.EqualTo(GenerateInts(n)));
+    }
   }
 
   private static ParallelTaskOptions? CreateOptions(bool?              unordered,
