@@ -1310,6 +1310,90 @@ public class ParallelSelectExtTest
 
   [Test]
   [AbortAfter(10000)]
+  public async Task MethodGroupWithAndWithoutToken([Values] bool useAsync,
+                                                   [Values] bool withOptions)
+  {
+    // A method group having a form with and a form without token must compile, and call the form without token
+    const int n       = 10;
+    var       f       = new OverloadedFunc();
+    var       options = new ParallelTaskOptions(2);
+
+    var selected = (useAsync, withOptions) switch
+                   {
+                     (false, false) => GenerateInts(n)
+                       .ParallelSelect(f.Select),
+                     (false, true) => GenerateInts(n)
+                       .ParallelSelect(options,
+                                       f.Select),
+                     (true, false) => GenerateIntsAsync(n)
+                       .ParallelSelect(f.Select),
+                     (true, true) => GenerateIntsAsync(n)
+                       .ParallelSelect(options,
+                                       f.Select),
+                   };
+
+    Assert.That(await selected.ToListAsync()
+                              .ConfigureAwait(false),
+                Is.EqualTo(Enumerable.Range(0,
+                                            n)));
+
+    await ((useAsync, withOptions) switch
+           {
+             (false, false) => GenerateInts(n)
+               .ParallelForEach(f.ForEach),
+             (false, true) => GenerateInts(n)
+               .ParallelForEach(options,
+                                f.ForEach),
+             (true, false) => GenerateIntsAsync(n)
+               .ParallelForEach(f.ForEach),
+             (true, true) => GenerateIntsAsync(n)
+               .ParallelForEach(options,
+                                f.ForEach),
+           }).ConfigureAwait(false);
+
+    Assert.That(f.WithoutToken,
+                Is.EqualTo(2 * n));
+    Assert.That(f.WithToken,
+                Is.Zero);
+  }
+
+  /// <summary>
+  ///   Methods having a form with and a form without token, as `Task.Delay`
+  /// </summary>
+  private sealed class OverloadedFunc
+  {
+    public int WithToken;
+    public int WithoutToken;
+
+    public Task<int> Select(int x)
+    {
+      Interlocked.Increment(ref WithoutToken);
+      return Task.FromResult(x);
+    }
+
+    public Task<int> Select(int               x,
+                            CancellationToken cancellationToken)
+    {
+      Interlocked.Increment(ref WithToken);
+      return Task.FromResult(x);
+    }
+
+    public Task ForEach(int x)
+    {
+      Interlocked.Increment(ref WithoutToken);
+      return Task.CompletedTask;
+    }
+
+    public Task ForEach(int               x,
+                        CancellationToken cancellationToken)
+    {
+      Interlocked.Increment(ref WithToken);
+      return Task.CompletedTask;
+    }
+  }
+
+  [Test]
+  [AbortAfter(10000)]
   public async Task SynchronousFuncWithForeignContext([Values] bool unordered)
   {
     const int n           = 16;

@@ -17,6 +17,7 @@
 using System;
 using System.Collections.Generic;
 using System.Linq;
+using System.Runtime.CompilerServices;
 using System.Threading;
 using System.Threading.Tasks;
 
@@ -29,6 +30,11 @@ namespace ArmoniK.Utils;
 /// </summary>
 public static class ParallelSelectExt
 {
+  // The overloads whose `func` takes no CancellationToken have a higher overload resolution priority.
+  // A method group having both forms (e.g. `Task.Delay`) would otherwise be ambiguous between them.
+  // It resolves to the form without token, as before the overloads with token were added.
+  // Compilers older than C# 13 ignore the priority and still report the ambiguity.
+
   /// <summary>
   ///   Iterates over the input enumerable and spawn multiple parallel tasks that call `func`.
   ///   The maximum number of tasks in flight at any given moment is given in the `parallelTaskOptions`.
@@ -148,6 +154,7 @@ public static class ParallelSelectExt
   /// <typeparam name="TOutput">Type of the outputs</typeparam>
   /// <returns>Asynchronous results of func over the inputs</returns>
   [PublicAPI]
+  [OverloadResolutionPriority(1)]
   public static IAsyncEnumerable<TOutput> ParallelSelect<TInput, TOutput>(this IEnumerable<TInput>    enumerable,
                                                                           ParallelTaskOptions         parallelTaskOptions,
                                                                           Func<TInput, Task<TOutput>> func)
@@ -170,6 +177,7 @@ public static class ParallelSelectExt
   /// <typeparam name="TOutput">Type of the outputs</typeparam>
   /// <returns>Asynchronous results of func over the inputs</returns>
   [PublicAPI]
+  [OverloadResolutionPriority(1)]
   public static IAsyncEnumerable<TOutput> ParallelSelect<TInput, TOutput>(this IAsyncEnumerable<TInput> enumerable,
                                                                           ParallelTaskOptions           parallelTaskOptions,
                                                                           Func<TInput, Task<TOutput>>   func)
@@ -191,6 +199,7 @@ public static class ParallelSelectExt
   /// <typeparam name="TOutput">Type of the outputs</typeparam>
   /// <returns>Asynchronous results of func over the inputs</returns>
   [PublicAPI]
+  [OverloadResolutionPriority(1)]
   public static IAsyncEnumerable<TOutput> ParallelSelect<TInput, TOutput>(this IEnumerable<TInput>    enumerable,
                                                                           Func<TInput, Task<TOutput>> func)
     => enumerable.ParallelSelect(default,
@@ -210,6 +219,7 @@ public static class ParallelSelectExt
   /// <typeparam name="TOutput">Type of the outputs</typeparam>
   /// <returns>Asynchronous results of func over the inputs</returns>
   [PublicAPI]
+  [OverloadResolutionPriority(1)]
   public static IAsyncEnumerable<TOutput> ParallelSelect<TInput, TOutput>(this IAsyncEnumerable<TInput> enumerable,
                                                                           Func<TInput, Task<TOutput>>   func)
     => enumerable.ParallelSelect(default,
@@ -341,6 +351,7 @@ public static class ParallelSelectExt
   /// <typeparam name="TInput">Type of the inputs</typeparam>
   /// <returns>Task completed when all the calls to `func` have completed</returns>
   [PublicAPI]
+  [OverloadResolutionPriority(1)]
   public static Task ParallelForEach<TInput>(this IEnumerable<TInput> enumerable,
                                              ParallelTaskOptions      parallelTaskOptions,
                                              Func<TInput, Task>       func)
@@ -362,6 +373,7 @@ public static class ParallelSelectExt
   /// <typeparam name="TInput">Type of the inputs</typeparam>
   /// <returns>Task completed when all the calls to `func` have completed</returns>
   [PublicAPI]
+  [OverloadResolutionPriority(1)]
   public static Task ParallelForEach<TInput>(this IAsyncEnumerable<TInput> enumerable,
                                              ParallelTaskOptions           parallelTaskOptions,
                                              Func<TInput, Task>            func)
@@ -382,6 +394,7 @@ public static class ParallelSelectExt
   /// <typeparam name="TInput">Type of the inputs</typeparam>
   /// <returns>Task completed when all the calls to `func` have completed</returns>
   [PublicAPI]
+  [OverloadResolutionPriority(1)]
   public static Task ParallelForEach<TInput>(this IEnumerable<TInput> enumerable,
                                              Func<TInput, Task>       func)
     => enumerable.ParallelForEach(default,
@@ -400,6 +413,7 @@ public static class ParallelSelectExt
   /// <typeparam name="TInput">Type of the inputs</typeparam>
   /// <returns>Task completed when all the calls to `func` have completed</returns>
   [PublicAPI]
+  [OverloadResolutionPriority(1)]
   public static Task ParallelForEach<TInput>(this IAsyncEnumerable<TInput> enumerable,
                                              Func<TInput, Task>            func)
     => enumerable.ParallelForEach(default,
